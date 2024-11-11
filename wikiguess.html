@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wikipedia Guessing Game</title>
+<style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    #game { max-width: 600px; margin: auto; }
+    #paragraph { white-space: pre-wrap; }
+    #clue { font-weight: bold; }
+    #message { color: red; }
+</style>
+</head>
+<body>
+<div id="game">
+    <h1>wikiguess by CRCR</h1>
+    <div id="setup">
+        <label for="maxWords">enter the maximum number of words the article title to guess can have:</label><br>
+        <input type="number" id="maxWords" min="1"><br><br>
+        <label for="language">enter the language code for the article to be guessed (e.g., 'en' for english, 'es' for spanish, 'fr' for french):</label><br>
+        <input type="text" id="language"><br><br>
+        <button id="startButton">start wikiguessing</button>
+    </div>
+    <div id="gameplay" style="display: none;">
+        <p id="note"></p>
+        <p id="paragraph"></p>
+        <input type="text" id="guessInput" placeholder="your guess (or type 'idk' to give up, 'clue' for a clue)"><br><br>
+        <button id="guessButton">guess</button>
+        <p id="clue"></p>
+        <p id="message"></p>
+    </div>
+</div>
+<script>
+(async function() {
+    const forbiddenTitles = ['idk', 'clue'];
+
+    let title = '';
+    let normalizedTitle = '';
+    let titleWordCount = 0;
+    let paragraphs = [];
+    let paragraphIndex = 0;
+    let revealedLetters = new Set();
+    let clueRevealed = false;
+    let guessCount = 0;
+    let language = 'en';
+
+    document.getElementById('startButton').addEventListener('click', startGame);
+    document.getElementById('guessButton').addEventListener('click', handleGuess);
+    document.getElementById('guessInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            handleGuess();
+        }
+    });
+
+    function normalizeTitle(str) {
+        return str.replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
+    }
+
+    function processParagraph(paragraph, titleVariants) {
+        let pattern = new RegExp(titleVariants.map(escapeRegExp).join('|'), 'gi');
+        let processedParagraph = paragraph.replace(pattern, 'WIKIGUESS');
+        return processedParagraph;
+    }
+
+    function escapeRegExp(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function revealClue(title, revealedLetters) {
+        let clue = '';
+        for (let char of title) {
+            if (char.toLowerCase() === ' ' || char === '-') {
+                clue += char;
+            } else if (revealedLetters.has(char.toLowerCase())) {
+                clue += char;
+            } else {
+                clue += '-';
+            }
+        }
+        return clue;
+    }
+
+    async function startGame() {
+        let maxTitleWords = parseInt(document.getElementById('maxWords').value);
+        language = document.getElementById('language').value || 'en';
+
+        document.getElementById('message').textContent = '';
+        let maxAttempts = 1000;
+        let attempts = 0;
+
+        while (attempts < maxAttempts) {
+            attempts++;
+            title = await getRandomArticleTitle(language);
+            if (!title) continue;
+            normalizedTitle = normalizeTitle(title);
+            if (forbiddenTitles.includes(normalizedTitle)) continue;
+            titleWordCount = title.split(/\s+/).length;
+            if (titleWordCount <= maxTitleWords) {
+                let extract = await getArticleExtract(language, title);
+                if (!extract) continue;
+                paragraphs = getValidParagraphs(extract);
+                if (paragraphs.length === 0) continue;
+                break;
+            }
+        }
+
+        if (attempts === maxAttempts) {
+            document.getElementById('message').textContent = 'unable to find a suitable article after multiple attempts. try a bigger maximum word count';
+            return;
+        }
+
+        document.getElementById('setup').style.display = 'none';
+        document.getElementById('gameplay').style.display = 'block';
+        document.getElementById('note').textContent = `note: the article title consists of ${titleWordCount} words`;
+
+        paragraphIndex = 0;
+        revealedLetters = new Set();
+        clueRevealed = false;
+        guessCount = 0;
+
+        showParagraph();
+    }
+
+    async function getRandomArticleTitle(language) {
+        let url = `https://${language}.wikipedia.org/w/api.php?action=query&list=random&rnnamespace=0&rnlimit=1&format=json&origin=*`;
+        try {
+            let response = await fetch(url);
+            let data = await response.json();
+            let title = data.query.random[0].title;
+            return title;
+        } catch (error) {
+            console.error(error);
+            return null;
+        }
+    }
+
+    async function getArticleExtract(language, title) {
+        let url = `https://${language}.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext&titles=${encodeURIComponent(title)}&format=json&origin=*`;
+        try {
+            let response = await fetch(url);
+            let data = await response.json();
+            let pages = data.query.pages;
+            let page = pages[Object.keys(pages)[0]];
+            return page.extract;
+        } catch (error) {
+            console.error(error);
+            return null;
+        }
+    }
+
+    function getValidParagraphs(extract) {
+        let lines = extract.split('\n');
+        let paragraphs = [];
+        let inValidSection = true;
+        let excludedSections = ['References', 'See also'];
+        let currentParagraph = [];
+
+        for (let line of lines) {
+            if (line.trim() === '') {
+                if (currentParagraph.length > 0) {
+                    paragraphs.push(currentParagraph.join('\n'));
+                    currentParagraph = [];
+                }
+                continue;
+            }
+            if (line.startsWith('==') && line.endsWith('==')) {
+                let sectionTitle = line.replace(/=/g, '').trim();
+                if (excludedSections.some(sec => sec.toLowerCase() === sectionTitle.toLowerCase())) {
+                    inValidSection = false;
+                } else {
+                    inValidSection = true;
+                }
+                continue;
+            }
+            if (inValidSection) {
+                currentParagraph.push(line);
+            }
+        }
+        if (currentParagraph.length > 0) {
+            paragraphs.push(currentParagraph.join('\n'));
+        }
+        return paragraphs;
+    }
+
+    function showParagraph() {
+        if (paragraphIndex >= paragraphs.length) {
+            document.getElementById('message').textContent = `you've run out of guesses. the article title was: ${title}`;
+            document.getElementById('guessInput').disabled = true;
+            document.getElementById('guessButton').disabled = true;
+            return;
+        }
+        let paragraph = paragraphs[paragraphIndex++];
+        let titleVariants = [title];
+        let titleWithoutParentheses = title.replace(/\s*\(.*?\)\s*/g, '').trim();
+        if (normalizeTitle(titleWithoutParentheses) !== normalizeTitle(title)) {
+            titleVariants.push(titleWithoutParentheses);
+        }
+        let processedParagraph = processParagraph(paragraph, titleVariants);
+        if (processedParagraph === paragraph) {
+            showParagraph(); // Skip paragraphs without the title
+        } else {
+            document.getElementById('paragraph').textContent = processedParagraph;
+            document.getElementById('guessInput').value = '';
+            document.getElementById('clue').textContent = '';
+        }
+    }
+
+    function handleGuess() {
+        let userInput = document.getElementById('guessInput').value.trim();
+        if (!userInput) return;
+        document.getElementById('message').textContent = '';
+        let userGuess = userInput.toLowerCase();
+        if (userGuess === 'idk') {
+            document.getElementById('message').textContent = `you gave up! the article title was: ${title}`;
+            document.getElementById('guessInput').disabled = true;
+            document.getElementById('guessButton').disabled = true;
+        } else if (userGuess === 'clue') {
+            if (!clueRevealed) {
+                clueRevealed = true;
+            } else {
+                let unrevealedLetters = new Set(normalizedTitle.replace(/\s+/g, '').split(''));
+                unrevealedLetters.forEach(letter => {
+                    if (revealedLetters.has(letter)) {
+                        unrevealedLetters.delete(letter);
+                    }
+                });
+                if (unrevealedLetters.size > 0) {
+                    let lettersArray = Array.from(unrevealedLetters);
+                    let randomLetter = lettersArray[Math.floor(Math.random() * lettersArray.length)];
+                    revealedLetters.add(randomLetter);
+                }
+            }
+            let clue = revealClue(normalizedTitle, revealedLetters);
+            document.getElementById('clue').textContent = `Clue: ${clue}`;
+        } else {
+            guessCount++;
+            if (normalizeTitle(userInput) === normalizedTitle) {
+                document.getElementById('message').textContent = `yay! you guessed correctly in ${guessCount} guesses!`;
+                document.getElementById('guessInput').disabled = true;
+                document.getElementById('guessButton').disabled = true;
+            } else {
+                document.getElementById('message').textContent = 'wrong guess. try again or type \'clue\' for a clue.';
+            }
+        }
+    }
+})();
+</script>
+</body>
+</html>
