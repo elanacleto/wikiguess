@@ -6,7 +6,7 @@
 <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     #game { max-width: 600px; margin: auto; }
-    #paragraph { white-space: pre-wrap; }
+    #paragraphs { white-space: pre-wrap; }
     #clue { font-weight: bold; }
     #message { color: red; }
 </style>
@@ -23,11 +23,12 @@
     </div>
     <div id="gameplay" style="display: none;">
         <p id="note"></p>
-        <p id="paragraph"></p>
+        <div id="paragraphs"></div>
         <input type="text" id="guessInput" placeholder="your guess (or type 'idk' to give up, 'clue' for a clue)"><br><br>
         <button id="guessButton">guess</button>
         <p id="clue"></p>
         <p id="message"></p>
+        <button id="playAgainButton" style="display: none;">play again</button>
     </div>
 </div>
 <script>
@@ -50,6 +51,9 @@
         if (e.key === 'Enter') {
             handleGuess();
         }
+    });
+    document.getElementById('playAgainButton').addEventListener('click', function() {
+        location.reload();
     });
 
     function normalizeTitle(str) {
@@ -187,6 +191,7 @@
             document.getElementById('message').textContent = `you've run out of guesses. the article title was: ${title}`;
             document.getElementById('guessInput').disabled = true;
             document.getElementById('guessButton').disabled = true;
+            document.getElementById('playAgainButton').style.display = 'inline';
             return;
         }
         let paragraph = paragraphs[paragraphIndex++];
@@ -199,7 +204,9 @@
         if (processedParagraph === paragraph) {
             showParagraph(); // Skip paragraphs without the title
         } else {
-            document.getElementById('paragraph').textContent = processedParagraph;
+            let paragraphElement = document.createElement('p');
+            paragraphElement.textContent = processedParagraph;
+            document.getElementById('paragraphs').appendChild(paragraphElement);
             document.getElementById('guessInput').value = '';
             document.getElementById('clue').textContent = '';
         }
@@ -214,6 +221,7 @@
             document.getElementById('message').textContent = `you gave up! the article title was: ${title}`;
             document.getElementById('guessInput').disabled = true;
             document.getElementById('guessButton').disabled = true;
+            document.getElementById('playAgainButton').style.display = 'inline';
         } else if (userGuess === 'clue') {
             if (!clueRevealed) {
                 clueRevealed = true;
@@ -238,8 +246,10 @@
                 document.getElementById('message').textContent = `yay! you guessed correctly in ${guessCount} guesses!`;
                 document.getElementById('guessInput').disabled = true;
                 document.getElementById('guessButton').disabled = true;
+                document.getElementById('playAgainButton').style.display = 'inline';
             } else {
                 document.getElementById('message').textContent = 'wrong guess. try again or type \'clue\' for a clue.';
+                showParagraph();
             }
         }
     }
