@@ -3,12 +3,43 @@
 <head>
 <meta charset="UTF-8">
 <title>wikiguess-crcr</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    #game { max-width: 600px; margin: auto; }
-    #paragraphs { white-space: pre-wrap; }
-    #clue { font-weight: bold; }
-    #message { color: red; }
+    body { 
+        font-family: Arial, sans-serif; 
+        margin: 5vw; 
+        font-size: 4vw;
+    }
+    #game { 
+        margin: auto; 
+    }
+    #paragraphs { 
+        white-space: pre-wrap; 
+    }
+    #clue { 
+        font-weight: bold; 
+    }
+    #message { 
+        color: red; 
+    }
+    input, button {
+        font-size: 4vw;
+    }
+    h1 {
+        font-size: 6vw;
+    }
+    @media screen and (min-width: 600px) {
+        body {
+            font-size: 16px;
+            margin: 20px;
+        }
+        input, button {
+            font-size: 16px;
+        }
+        h1 {
+            font-size: 24px;
+        }
+    }
 </style>
 </head>
 <body>
