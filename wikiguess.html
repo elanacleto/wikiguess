@@ -126,7 +126,8 @@
                         usableParagraphs.push(processedParagraph);
                     }
                 }
-                if (usableParagraphs.length === 0) continue; // No usable paragraphs, try another article
+                // Ensure there are at least 3 usable paragraphs
+                if (usableParagraphs.length < 3) continue; // Not enough paragraphs, try another article
 
                 totalGuesses = usableParagraphs.length;
                 paragraphIndex = 0;
