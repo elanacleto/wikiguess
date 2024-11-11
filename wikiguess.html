@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Wikipedia Guessing Game</title>
+<title>wikiguess by CRCR</title>
 <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     #game { max-width: 600px; margin: auto; }
@@ -100,8 +100,10 @@
             if (forbiddenTitles.includes(normalizedTitle)) continue;
             titleWordCount = title.split(/\s+/).length;
             if (titleWordCount <= maxTitleWords) {
-                let extract = await getArticleExtract(language, title);
-                if (!extract) continue;
+                let extractData = await getArticleExtract(language, title);
+                if (!extractData) continue;
+                let { extract, isDisambiguation } = extractData;
+                if (isDisambiguation) continue; // Skip disambiguation pages
                 paragraphs = getValidParagraphs(extract);
                 if (paragraphs.length === 0) continue;
                 break;
@@ -139,13 +141,16 @@
     }
 
     async function getArticleExtract(language, title) {
-        let url = `https://${language}.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext&titles=${encodeURIComponent(title)}&format=json&origin=*`;
+        let url = `https://${language}.wikipedia.org/w/api.php?action=query&prop=extracts|categories&explaintext&titles=${encodeURIComponent(title)}&clcategories=Category:All%20disambiguation%20pages|Category:Disambiguation%20pages&format=json&origin=*`;
         try {
             let response = await fetch(url);
             let data = await response.json();
             let pages = data.query.pages;
             let page = pages[Object.keys(pages)[0]];
-            return page.extract;
+            let extract = page.extract;
+            let categories = page.categories || [];
+            let isDisambiguation = categories.some(cat => cat.title.toLowerCase().includes('disambiguation pages'));
+            return { extract, isDisambiguation };
         } catch (error) {
             console.error(error);
             return null;
@@ -239,7 +244,7 @@
                 }
             }
             let clue = revealClue(normalizedTitle, revealedLetters);
-            document.getElementById('clue').textContent = `Clue: ${clue}`;
+            document.getElementById('clue').textContent = `clue: ${clue}`;
         } else {
             guessCount++;
             if (normalizeTitle(userInput) === normalizedTitle) {
