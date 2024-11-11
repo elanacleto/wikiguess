@@ -23,6 +23,7 @@
     </div>
     <div id="gameplay" style="display: none;">
         <p id="note"></p>
+        <p id="guessesLeft"></p>
         <div id="paragraphs"></div>
         <input type="text" id="guessInput" placeholder="your guess (or type 'idk' to give up, 'clue' for a clue)"><br><br>
         <button id="guessButton">guess</button>
@@ -39,11 +40,13 @@
     let normalizedTitle = '';
     let titleWordCount = 0;
     let paragraphs = [];
+    let usableParagraphs = [];
     let paragraphIndex = 0;
     let revealedLetters = new Set();
     let clueRevealed = false;
     let guessCount = 0;
     let language = 'en';
+    let totalGuesses = 0;
 
     document.getElementById('startButton').addEventListener('click', startGame);
     document.getElementById('guessButton').addEventListener('click', handleGuess);
@@ -106,6 +109,27 @@
                 if (isDisambiguation) continue; // Skip disambiguation pages
                 paragraphs = getValidParagraphs(extract);
                 if (paragraphs.length === 0) continue;
+
+                // Prepare title variants for replacement and matching
+                let titleVariants = [title];
+                let titleWithoutParentheses = title.replace(/\s*\(.*?\)\s*/g, '').trim();
+                if (normalizeTitle(titleWithoutParentheses) !== normalizeTitle(title)) {
+                    titleVariants.push(titleWithoutParentheses);
+                }
+                let pattern = new RegExp(titleVariants.map(escapeRegExp).join('|'), 'gi');
+
+                // Prepare usableParagraphs
+                usableParagraphs = [];
+                for (let paragraph of paragraphs) {
+                    let processedParagraph = paragraph.replace(pattern, 'WIKIGUESS');
+                    if (processedParagraph !== paragraph) {
+                        usableParagraphs.push(processedParagraph);
+                    }
+                }
+                if (usableParagraphs.length === 0) continue; // No usable paragraphs, try another article
+
+                totalGuesses = usableParagraphs.length;
+                paragraphIndex = 0;
                 break;
             }
         }
@@ -118,8 +142,8 @@
         document.getElementById('setup').style.display = 'none';
         document.getElementById('gameplay').style.display = 'block';
         document.getElementById('note').textContent = `note: the article title consists of ${titleWordCount} words`;
+        document.getElementById('guessesLeft').textContent = `you have ${totalGuesses} guesses`;
 
-        paragraphIndex = 0;
         revealedLetters = new Set();
         clueRevealed = false;
         guessCount = 0;
@@ -141,15 +165,14 @@
     }
 
     async function getArticleExtract(language, title) {
-        let url = `https://${language}.wikipedia.org/w/api.php?action=query&prop=extracts|categories&explaintext&titles=${encodeURIComponent(title)}&clcategories=Category:All%20disambiguation%20pages|Category:Disambiguation%20pages&format=json&origin=*`;
+        let url = `https://${language}.wikipedia.org/w/api.php?action=query&prop=extracts|pageprops&explaintext&titles=${encodeURIComponent(title)}&format=json&origin=*`;
         try {
             let response = await fetch(url);
             let data = await response.json();
             let pages = data.query.pages;
             let page = pages[Object.keys(pages)[0]];
             let extract = page.extract;
-            let categories = page.categories || [];
-            let isDisambiguation = categories.some(cat => cat.title.toLowerCase().includes('disambiguation pages'));
+            let isDisambiguation = page.pageprops && page.pageprops.disambiguation !== undefined;
             return { extract, isDisambiguation };
         } catch (error) {
             console.error(error);
@@ -192,29 +215,24 @@
     }
 
     function showParagraph() {
-        if (paragraphIndex >= paragraphs.length) {
+        if (paragraphIndex >= usableParagraphs.length) {
             document.getElementById('message').textContent = `you've run out of guesses. the article title was: ${title}`;
             document.getElementById('guessInput').disabled = true;
             document.getElementById('guessButton').disabled = true;
             document.getElementById('playAgainButton').style.display = 'inline';
+            document.getElementById('guessesLeft').textContent = '';
             return;
         }
-        let paragraph = paragraphs[paragraphIndex++];
-        let titleVariants = [title];
-        let titleWithoutParentheses = title.replace(/\s*\(.*?\)\s*/g, '').trim();
-        if (normalizeTitle(titleWithoutParentheses) !== normalizeTitle(title)) {
-            titleVariants.push(titleWithoutParentheses);
-        }
-        let processedParagraph = processParagraph(paragraph, titleVariants);
-        if (processedParagraph === paragraph) {
-            showParagraph(); // Skip paragraphs without the title
-        } else {
-            let paragraphElement = document.createElement('p');
-            paragraphElement.textContent = processedParagraph;
-            document.getElementById('paragraphs').appendChild(paragraphElement);
-            document.getElementById('guessInput').value = '';
-            document.getElementById('clue').textContent = '';
-        }
+        let processedParagraph = usableParagraphs[paragraphIndex];
+        paragraphIndex++;
+        let paragraphElement = document.createElement('p');
+        paragraphElement.textContent = processedParagraph;
+        document.getElementById('paragraphs').appendChild(paragraphElement);
+        document.getElementById('guessInput').value = '';
+        document.getElementById('clue').textContent = '';
+
+        let guessesLeft = totalGuesses - paragraphIndex;
+        document.getElementById('guessesLeft').textContent = `you have ${guessesLeft} guesses left`;
     }
 
     function handleGuess() {
@@ -227,6 +245,7 @@
             document.getElementById('guessInput').disabled = true;
             document.getElementById('guessButton').disabled = true;
             document.getElementById('playAgainButton').style.display = 'inline';
+            document.getElementById('guessesLeft').textContent = '';
         } else if (userGuess === 'clue') {
             if (!clueRevealed) {
                 clueRevealed = true;
@@ -252,6 +271,7 @@
                 document.getElementById('guessInput').disabled = true;
                 document.getElementById('guessButton').disabled = true;
                 document.getElementById('playAgainButton').style.display = 'inline';
+                document.getElementById('guessesLeft').textContent = '';
             } else {
                 document.getElementById('message').textContent = 'wrong guess. try again or type \'clue\' for a clue.';
                 showParagraph();
